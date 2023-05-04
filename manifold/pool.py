@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 
+from itertools import starmap
 
 # Used in place of a multiprocessing Pool
 # when the size of the pool is 1, re-implement
@@ -13,3 +14,6 @@ class SingletonPool:
 
     def map(self, *args) -> list:
         return list(map(*args))
+
+    def starmap(self, *args) -> list:
+        return list(starmap(*args))
