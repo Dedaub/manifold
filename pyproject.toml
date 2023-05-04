@@ -1,0 +1,18 @@
+[tool.poetry]
+name = "manifold"
+version = "0.1.0"
+description = "Light and Robust Web3 Multicall"
+authors = ["Tony Rocco Valentine <tonyroccovalentine@protonmail.com>"]
+license = "MIT"
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = "^3.10"
+aiohttp = "^3.8.4"
+eth-retry = "^0.1.17"
+pysad = {git = "git@github.com:Dedaub/pySAD.git"}
+
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"

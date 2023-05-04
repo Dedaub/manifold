@@ -1,0 +1,46 @@
+select = ["B","C","E","F","W"]
+ignore = [
+    "E501", # Line too long
+    "E731", # do not assign a lambda expression use a deg
+    "B905", # `zip()` without an explicit `strict=` parameter
+    "B008", # do not perform function calls in argument defaults
+]
+
+# Allow autofix for all enabled rules (when `--fix`) is provided.
+fixable = ["B","C","E","F","W"]
+unfixable = []
+
+# Exclude a variety of commonly ignored directories.
+exclude = [
+    ".bzr",
+    ".direnv",
+    ".eggs",
+    ".git",
+    ".hg",
+    ".mypy_cache",
+    ".nox",
+    ".pants.d",
+    ".pytype",
+    ".ruff_cache",
+    ".svn",
+    ".tox",
+    ".venv",
+    "__pypackages__",
+    "_build",
+    "buck-out",
+    "build",
+    "dist",
+    "node_modules",
+    "venv",
+]
+
+per-file-ignores = {"**/__init__.py" = ["F401"]}
+
+# Same as Black.
+line-length = 88
+
+# Assume Python 3.10.
+target-version = "py310"
+
+# Unlike Flake8, default to a complexity level of 10.
+mccabe.max-complexity = 10
