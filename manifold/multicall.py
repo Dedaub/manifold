@@ -3,15 +3,18 @@
 
 import asyncio
 import multiprocessing as mp
+import warnings
 from contextlib import nullcontext
-from itertools import repeat
+from itertools import chain
+from math import ceil
 from multiprocessing.pool import Pool
 from operator import methodcaller
-from typing import Any, Literal
+from typing import Any, Hashable, Iterable, Literal, TypeVar, cast
 
 import eth_retry
 import eth_retry.eth_retry
 from aiohttp import ClientSession, ClientTimeout, TCPConnector
+from parse import Result, parse
 from pysad.utils import hex_to_bytes
 
 from manifold.call import Call
@@ -23,6 +26,9 @@ from manifold.signature import Signature
 eth_retry.eth_retry.MIN_SLEEP_TIME = 5
 eth_retry.eth_retry.MAX_SLEEP_TIME = 10
 eth_retry.eth_retry.MAX_RETRIES = 5
+
+
+T = TypeVar("T")
 
 
 class MultiCall:
@@ -59,13 +65,7 @@ class MultiCall:
         self.signature = Signature(AGGREGATE_SIGNATURE)
         self.address = hex_to_bytes(MULTICALL_MAP[chain_id])
 
-        timeout = ClientTimeout(
-            total=None, connect=None, sock_connect=None, sock_read=None
-        )
-        connector = TCPConnector(limit=self.num_conns)
-        self.http_client = ClientSession(connector=connector, timeout=timeout)
-
-    async def aggregate(self) -> dict[str, Any]:
+    def aggregate(self) -> dict[Hashable, Any]:
         pool: nullcontext[SingletonPool] | Pool
 
         if self.num_procs > 1:
@@ -74,83 +74,99 @@ class MultiCall:
             pool = ctx.Pool(self.num_procs)
         else:
             pool = nullcontext(SingletonPool())
-            pass
 
         with pool as p:
-            # step 1: encode individual calls in parallel
-            calls: list[tuple[bytes, bytes]] = p.map(
-                methodcaller("prepare"), self.calls
+            call_batches = self._batch(
+                self.calls, ceil(len(self.calls) / self.num_procs)
             )
-            # step 2: batch calls and construct multicall calldatas
-            call_batches = self._batch_calls(calls)
-            multicalls = p.map(self.construct_multicall, call_batches)
+            decoded_results: list[list[tuple[Hashable, Any]]] = p.map(
+                self.multicall_worker, call_batches
+            )
+            # step 7: process outputs
+            return dict(chain.from_iterable(decoded_results))
 
-            # step 3: perform eth_calls and aggregate results
+    def multicall_worker(self, calls: list[Call]) -> list[tuple[Hashable, Any]]:
+        raw_calls = [call.prepare() for call in calls]
+        batches = self._batch(raw_calls, self.batch_size)
+        multicalls = [self.construct_multicall(batch) for batch in batches]
+        loop = asyncio.new_event_loop()
+        raw_results = loop.run_until_complete(self.execute_calls(batches, multicalls))
+        decoded_results = [
+            call.decode_output(*result)
+            for call, result in zip(calls, chain.from_iterable(raw_results))
+        ]
+        return decoded_results
+
+    async def execute_calls(
+        self, batches: list[list[tuple[bytes, bytes]]], multicalls: list[bytes]
+    ):
+        async with self.create_http_client() as http_client:
             raw_results = await asyncio.gather(
-                *[self._eth_call(calldata) for calldata in multicalls]
+                *[
+                    self._eth_call(http_client, calldata)  # type: ignore
+                    for calldata in multicalls
+                ]
             )
 
-            # step 4: filter out failed batches
             error_bitmap = [not isinstance(x, bytes) for x in raw_results]
-            multicall_decoded_results = p.map(
-                self.decode_multicall, (r for r in raw_results if isinstance(r, bytes))
+            multicall_raw_results = (
+                self.decode_multicall(r)
+                for r, e in zip(raw_results, error_bitmap)
+                if not e
             )
-            failed_batches = [
-                batch for batch, error in zip(call_batches, error_bitmap) if error
-            ]
+            failed_batches = (
+                batch for batch, error in zip(batches, error_bitmap) if error
+            )
 
-            # step 5: fallback to standard `eth_call` for failed batches
-            fallback_decoded_results = await asyncio.gather(
+            fallback_raw_results = await asyncio.gather(
                 *[
                     asyncio.gather(
                         *[
-                            (True, call_result)
-                            if isinstance(
-                                (call_result := self._eth_call(calldata, target)), bytes
-                            )
-                            else (False, call_result)
-                            for calldata, target in batch
+                            self._eth_call(http_client, calldata, target)
+                            for target, calldata in batch
                         ]
                     )
                     for batch in failed_batches
                 ]
             )
 
-            # step 6: merge call sets
-            decoded_results = [
-                fallback_decoded_results.pop(0)
-                if error
-                else multicall_decoded_results.pop(0)
+            fallback_raw_results = (
+                [(isinstance(call, bytes), call) for call in batch]
+                for batch in fallback_raw_results
+            )
+
+            raw_results = [
+                next(fallback_raw_results) if error else next(multicall_raw_results)
                 for error in error_bitmap
             ]
 
-            # step 7: process outputs
-            return dict(
-                p.starmap(
-                    bluebird, zip(repeat("decode_output"), decoded_results, calls)
-                )
-            )
+            return raw_results
 
-    def _batch_calls(
-        self, calls: list[tuple[bytes, bytes]]
-    ) -> list[list[tuple[bytes, bytes]]]:
-        return [
-            calls[i : i + self.batch_size]
-            for i in range(0, len(calls), self.batch_size)
-        ]
+    def create_http_client(self) -> ClientSession:
+        timeout = ClientTimeout(
+            total=None, connect=None, sock_connect=None, sock_read=None
+        )
+        connector = TCPConnector(limit=self.num_conns // self.num_procs)
+        http_client = ClientSession(connector=connector, timeout=timeout)
+        return http_client
 
-    def construct_multicall(self, inputs: list[tuple[bytes, bytes]]) -> bytes:
-        return self.signature.encode_input((self.require_success, inputs))
+    def _batch(self, items: list[T], batch_size: int) -> list[list[T]]:
+        return [items[i : i + batch_size] for i in range(0, len(items), batch_size)]
+
+    def construct_multicall(self, inputs: Iterable[tuple[bytes, bytes]]) -> bytes:
+        return self.signature.selector + self.signature.encode_input(
+            (self.require_success, inputs)
+        )
 
     def decode_multicall(self, output: bytes) -> list[tuple[bool, bytes]]:
         return self.signature.decode_output(output)[0]
 
-    @eth_retry.auto_retry
+    # @eth_retry.auto_retry
     async def _eth_call(
-        self, calldata: bytes, target: bytes | None = None
+        self, http_client: ClientSession, calldata: bytes, target: bytes | None = None
     ) -> bytes | tuple[JSONRPCErrorCode, str]:
         target = target or self.address
-        async with self.http_client.post(
+        async with http_client.post(
             self.rpc_url,
             json={
                 "method": "eth_call",
@@ -164,11 +180,21 @@ class MultiCall:
         ) as resp:
             if resp.status != 200:
                 raise RuntimeError("`eth_call` failed for unknown reason")
-
             data = await resp.json()
+
             if "error" in data:
                 error = data["error"]
                 code, message = error["code"], error["message"]
+                if (
+                    lengths := parse(
+                        "call retuned result on length {} exceeding limit {}", message
+                    )
+                ) is not None:
+                    lengths = cast(Result, lengths)
+                    returned, allowed = lengths[0], lengths[1]
+                    warnings.warn(
+                        f"Multicall return length ({returned}) exceeds maximum return length ({allowed}), adjust your batch size to prevent fallback calls"
+                    )
                 return code, message
 
             return bytes.fromhex(data["result"][2:])
