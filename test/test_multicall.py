@@ -40,10 +40,15 @@ def test_multicall(num_procs: int, batch_divisor: int):
         )
     )
     multicall = MultiCall(
-        "http://localhost:8090/ethereum", calls, batch_size=len(calls) // 4, num_procs=1
+        "http://localhost:8090/ethereum",
+        calls,
+        batch_size=len(calls) // batch_divisor,
+        num_procs=num_procs,
     )
     results = cast(dict[tuple[str, str], Any], multicall.aggregate())
     assert len(results) == len(calls)
     tokens = {}
     for (token, key), value in results.items():
         tokens[token] = tokens.get(token, {}) | {key: value}
+
+    assert tokens == POPULAR_TOKENS
