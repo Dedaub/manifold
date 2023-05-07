@@ -159,5 +159,5 @@ def test_call_encode(function: str, input: tuple, expected: str):
     ],
 )
 def test_call_decode(signature: str, data: bytes, expected: Any):
-    call = Call(b"\x00" * 20, signature, (), "test")
+    call = Call(b"\x00" * 20, signature, "test")
     assert call.decode_output(True, data) == ("test", expected)

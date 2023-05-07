@@ -1,17 +1,19 @@
 #!/usr/bin/env python3
 
-from typing import Any, Callable, Hashable
+from typing import Any, Callable, Generic, Hashable, TypeVar
 
 from pysad.utils import hex_to_bytes
 
 from manifold.signature import Signature
 
+THashable = TypeVar("THashable", bound=Hashable)
 
-class Call:
+
+class Call(Generic[THashable]):
     target: bytes
     signature: Signature
     input: tuple
-    output_label: Hashable
+    output_label: THashable
     output_handler: Callable | None = None
     auto_unpack: bool  # auto-unpack decoded tuples with 1 element
 
@@ -19,14 +21,14 @@ class Call:
         self,
         target: str | bytes,
         function: str,
-        input: tuple,
-        output_label: Hashable,  # output label
+        output_label: THashable,
+        input: tuple | None = None,
         output_handler: Callable | None = None,  # optional post-processing function
         auto_unpack: bool = True,
     ):
         self.target = hex_to_bytes(target)
         self.signature = Signature(function)
-        self.input = input
+        self.input = input if input is not None else ()
         self.output_label = output_label
         self.output_handler = output_handler
 
@@ -38,7 +40,7 @@ class Call:
     def prepare(self) -> tuple[bytes, bytes]:
         return self.target, self.signature.selector + self.encode()
 
-    def decode_output(self, success: bool, data: bytes) -> tuple[Hashable, Any]:
+    def decode_output(self, success: bool, data: bytes) -> tuple[THashable, Any]:
         if success is False:
             decoded_data = None
         else:
@@ -48,7 +50,7 @@ class Call:
                 decoded_data = None
             else:
                 if self.output_handler is not None:
-                    decoded_data = self.output_handler(*data)
+                    decoded_data = self.output_handler(*decoded_data)
                 elif len(decoded_data) == 1 and self.auto_unpack:
                     decoded_data = decoded_data[0]
 

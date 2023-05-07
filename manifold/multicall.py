@@ -9,7 +9,7 @@ from itertools import chain
 from math import ceil
 from multiprocessing.pool import Pool
 from operator import methodcaller
-from typing import Any, Hashable, Iterable, Literal, TypeVar, cast
+from typing import Any, Generic, Iterable, Literal, cast
 
 import eth_retry
 import eth_retry.eth_retry
@@ -17,23 +17,21 @@ from aiohttp import ClientSession, ClientTimeout, TCPConnector
 from parse import Result, parse
 from pysad.utils import hex_to_bytes
 
-from manifold.call import Call
+from manifold.call import Call, THashable
 from manifold.constants import AGGREGATE_SIGNATURE, MULTICALL_MAP
 from manifold.pool import SingletonPool
 from manifold.rpc import JSONRPCErrorCode
 from manifold.signature import Signature
+from manifold.utils import batch
 
 eth_retry.eth_retry.MIN_SLEEP_TIME = 5
 eth_retry.eth_retry.MAX_SLEEP_TIME = 10
 eth_retry.eth_retry.MAX_RETRIES = 5
 
 
-T = TypeVar("T")
-
-
-class MultiCall:
+class MultiCall(Generic[THashable]):
     rpc_url: str
-    calls: list[Call]
+    calls: list[Call[THashable]]
     batch_size: int  # size of each multicall batch
     num_procs: int  # number of processes to handle abi encoding/decoding
     signature: Signature
@@ -44,7 +42,7 @@ class MultiCall:
     def __init__(
         self,
         rpc_url: str,
-        calls: list[Call],
+        calls: list[Call[THashable]],
         batch_size: int = 1000,
         require_success: bool = False,
         chain_id: int = 1,
@@ -65,7 +63,7 @@ class MultiCall:
         self.signature = Signature(AGGREGATE_SIGNATURE)
         self.address = hex_to_bytes(MULTICALL_MAP[chain_id])
 
-    def aggregate(self) -> dict[Hashable, Any]:
+    def aggregate(self) -> dict[THashable, Any]:
         pool: nullcontext[SingletonPool] | Pool
 
         if self.num_procs > 1:
@@ -76,18 +74,16 @@ class MultiCall:
             pool = nullcontext(SingletonPool())
 
         with pool as p:
-            call_batches = self._batch(
-                self.calls, ceil(len(self.calls) / self.num_procs)
-            )
-            decoded_results: list[list[tuple[Hashable, Any]]] = p.map(
-                self.multicall_worker, call_batches
-            )
+            call_batches = batch(self.calls, ceil(len(self.calls) / self.num_procs))
+            decoded_results = p.map(self.multicall_worker, call_batches)
             # step 7: process outputs
             return dict(chain.from_iterable(decoded_results))
 
-    def multicall_worker(self, calls: list[Call]) -> list[tuple[Hashable, Any]]:
+    def multicall_worker(
+        self, calls: list[Call[THashable]]
+    ) -> list[tuple[THashable, Any]]:
         raw_calls = [call.prepare() for call in calls]
-        batches = self._batch(raw_calls, self.batch_size)
+        batches = list(batch(raw_calls, self.batch_size))
         multicalls = [self.construct_multicall(batch) for batch in batches]
         loop = asyncio.new_event_loop()
         raw_results = loop.run_until_complete(self.execute_calls(batches, multicalls))
@@ -149,9 +145,6 @@ class MultiCall:
         connector = TCPConnector(limit=self.num_conns // self.num_procs)
         http_client = ClientSession(connector=connector, timeout=timeout)
         return http_client
-
-    def _batch(self, items: list[T], batch_size: int) -> list[list[T]]:
-        return [items[i : i + batch_size] for i in range(0, len(items), batch_size)]
 
     def construct_multicall(self, inputs: Iterable[tuple[bytes, bytes]]) -> bytes:
         return self.signature.selector + self.signature.encode_input(
