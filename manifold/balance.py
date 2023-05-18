@@ -28,9 +28,7 @@ class BalanceRequest:
         self.token_address = hex_to_bytes(token_address)
 
     def is_native(self) -> bool:
-        return (
-            self.token_address == NATIVE_ADDRESS or self.token_address == ZERO_ADDRESS
-        )
+        return self.token_address == NATIVE_ADDRESS
 
 
 class Balance(BalanceRequest):
