@@ -2,7 +2,7 @@
 
 
 from itertools import chain
-from typing import Literal, TypeVar
+from typing import Literal
 
 from pysad.utils import hex_to_bytes
 
@@ -17,8 +17,6 @@ from manifold.constants import (
 )
 from manifold.multicall import MultiCall
 from manifold.utils import batch
-
-T = TypeVar("T")
 
 
 class BalanceRequest:
