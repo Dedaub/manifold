@@ -99,7 +99,7 @@ from manifold.call import Call
     ],
 )
 def test_call_encode(function: str, input: tuple, expected: str):
-    call = Call(b"\x00" * 20, function, input, "test")
+    call = Call(b"\x00" * 20, function, "test", input=input)
     assert call.encode() == hex_to_bytes(expected)[4:]
 
 

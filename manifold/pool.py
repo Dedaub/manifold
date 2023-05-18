@@ -16,6 +16,12 @@ class SingletonPool:
     def __init__(self, *args, **kwargs):
         pass
 
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *_):
+        return
+
     def map(self, func: Callable[[TI], TO], args: Iterable[TI]) -> list[TO]:
         return list(map(func, args))
 
