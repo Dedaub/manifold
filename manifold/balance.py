@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 
 
-from collections.abc import Iterable
 from itertools import chain
 from typing import Literal, TypeVar
 
@@ -11,14 +10,13 @@ from manifold.call import Call
 from manifold.constants import (
     BCHECKER_ADDRESSES,
     ERC20_BALANCE_SIGNATURE,
+    NATIVE_ADDRESS,
     NATIVE_BALANCE_SIGNATURE,
+    ZERO_ADDRESS,
     Network,
 )
 from manifold.multicall import MultiCall
-
-ZERO_ADDRESS = b"\x00" * 20
-NATIVE_ADDRESS = ZERO_ADDRESS = b"\xee" * 20
-
+from manifold.utils import batch
 
 T = TypeVar("T")
 
@@ -52,7 +50,7 @@ class Balance(BalanceRequest):
 class BalanceChecker:
     rpc_url: str
     calls: list[BalanceRequest]
-    batch_size: int  # size of each multicall batch
+    batch_size: int  # size of each call batch
     num_procs: int  # number of processes to handle abi encoding/decoding
     chain_id: int
     block_number: int | Literal["latest"]
@@ -98,6 +96,8 @@ class BalanceChecker:
                 self.batch_size,
                 require_success=False,
                 chain_id=self.chain_id,
+                num_conns=self.num_conns,
+                num_procs=self.num_procs,
                 block_number=self.block_number,
             )
 
@@ -122,10 +122,13 @@ class BalanceChecker:
                             [balance.owner_address for balance in batch],
                         ),
                     )
-                    for batch in self._batch(native_balances)
+                    for batch in batch(native_balances, self.batch_size)
                 ],
+                self.batch_size,
                 require_success=False,
                 chain_id=self.chain_id,
+                num_conns=self.num_conns,
+                num_procs=self.num_procs,
                 block_number=self.block_number,
             )
 
@@ -138,12 +141,6 @@ class BalanceChecker:
             )
 
         return balances
-
-    def _batch(self, items: list[T]) -> Iterable[list[T]]:
-        pos: int = 0
-        while pos < len(items):
-            yield items[pos : min(pos + self.batch_size, len(items))]
-            pos += self.batch_size
 
     def _segment_balances(self) -> tuple[list[BalanceRequest], list[BalanceRequest]]:
         native_balances = []
