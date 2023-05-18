@@ -24,15 +24,15 @@ class BalanceRequest:
     owner_address: bytes
 
     def __init__(self, token_address: str | bytes, owner_address: str | bytes) -> None:
-        self.token_address = hex_to_bytes(token_address)
-        self.owner_address = (
+        self.owner_address = hex_to_bytes(owner_address)
+        self.token_address = (
             _address
-            if (_address := hex_to_bytes(owner_address)) != ZERO_ADDRESS
+            if (_address := hex_to_bytes(token_address)) != ZERO_ADDRESS
             else NATIVE_ADDRESS
         )
 
     def is_native(self) -> bool:
-        return self.owner_address == NATIVE_ADDRESS
+        return self.token_address == NATIVE_ADDRESS
 
 
 class Balance(BalanceRequest):
