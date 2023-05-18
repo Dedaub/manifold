@@ -2,7 +2,7 @@
 
 from itertools import chain
 from test.data.tokens import POPULAR_TOKENS
-from typing import Literal, cast
+from typing import Any, Literal, cast
 
 import pytest
 
@@ -48,7 +48,7 @@ def test_multicall(num_procs: int, batch_divisor: int):
     )
     results = multicall.aggregate()
     assert len(results) == len(calls)
-    tokens = {}
+    tokens: dict[str, dict[str, Any]] = {}
     for (token, key), value in results.items():
         tokens[token] = tokens.get(token, {}) | {key: value}
 

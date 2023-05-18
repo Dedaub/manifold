@@ -79,12 +79,12 @@ class BalanceChecker:
 
         self.address = hex_to_bytes(BCHECKER_ADDRESSES[Network(chain_id)])
 
-    def aggregate(self):
+    def aggregate(self) -> list[Balance]:
         native_balances, erc20_balances = self._segment_balances()
         balances: list[Balance] = []
 
         if len(erc20_balances):
-            multicall = MultiCall(
+            erc20 = MultiCall(
                 self.rpc_url,
                 [
                     Call(
@@ -106,11 +106,11 @@ class BalanceChecker:
                 for (
                     token_address,
                     owner_address,
-                ), value in multicall.aggregate().items()
+                ), value in erc20.aggregate().items()
             ]
 
         if len(native_balances):
-            multicall = MultiCall(
+            native = MultiCall(
                 self.rpc_url,
                 [
                     Call(
@@ -134,7 +134,7 @@ class BalanceChecker:
                     Balance(balance.token_address, balance.owner_address, value)
                     for balance, value in zip(balances, values)
                 )
-                for balances, values in multicall.aggregate().items()
+                for balances, values in native.aggregate().items()
             )
 
         return balances

@@ -4,7 +4,6 @@
 import asyncio
 import multiprocessing as mp
 import warnings
-from contextlib import nullcontext
 from itertools import chain
 from math import ceil
 from multiprocessing.pool import Pool
@@ -14,7 +13,7 @@ from typing import Any, Generic, Iterable, Literal, cast
 import eth_retry
 import eth_retry.eth_retry
 from aiohttp import ClientSession, ClientTimeout, TCPConnector
-from parse import Result, parse
+from parse import Result, parse  # type: ignore
 from pysad.utils import hex_to_bytes
 
 from manifold.call import Call, THashable
@@ -64,14 +63,14 @@ class MultiCall(Generic[THashable]):
         self.address = hex_to_bytes(MULTICALL_MAP[chain_id])
 
     def aggregate(self) -> dict[THashable, Any]:
-        pool: nullcontext[SingletonPool] | Pool
+        pool: SingletonPool | Pool
 
         if self.num_procs > 1:
             # using fork server to avoid memory copies
             ctx = mp.get_context("forkserver")
             pool = ctx.Pool(self.num_procs)
         else:
-            pool = nullcontext(SingletonPool())
+            pool = SingletonPool()
 
         with pool as p:
             call_batches = batch(self.calls, ceil(len(self.calls) / self.num_procs))
