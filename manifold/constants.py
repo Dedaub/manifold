@@ -3,7 +3,7 @@
 from enum import IntEnum
 
 ZERO_ADDRESS = b"\x00" * 20
-NATIVE_ADDRESS = ZERO_ADDRESS = b"\xee" * 20
+NATIVE_ADDRESS = b"\xee" * 20
 
 
 class Network(IntEnum):

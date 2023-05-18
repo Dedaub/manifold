@@ -25,14 +25,12 @@ class BalanceRequest:
 
     def __init__(self, token_address: str | bytes, owner_address: str | bytes) -> None:
         self.owner_address = hex_to_bytes(owner_address)
-        self.token_address = (
-            _address
-            if (_address := hex_to_bytes(token_address)) != ZERO_ADDRESS
-            else NATIVE_ADDRESS
-        )
+        self.token_address = hex_to_bytes(token_address)
 
     def is_native(self) -> bool:
-        return self.token_address == NATIVE_ADDRESS
+        return (
+            self.token_address == NATIVE_ADDRESS or self.token_address == ZERO_ADDRESS
+        )
 
 
 class Balance(BalanceRequest):
@@ -114,13 +112,13 @@ class BalanceChecker:
                     Call(
                         self.address,
                         NATIVE_BALANCE_SIGNATURE,
-                        tuple(batch),
+                        tuple(_batch),
                         input=(
-                            [ZERO_ADDRESS] * len(batch),
-                            [balance.owner_address for balance in batch],
+                            [balance.owner_address for balance in _batch],
+                            [ZERO_ADDRESS],
                         ),
                     )
-                    for batch in batch(native_balances, self.batch_size)
+                    for _batch in batch(native_balances, self.batch_size)
                 ],
                 self.batch_size,
                 require_success=False,
@@ -130,12 +128,13 @@ class BalanceChecker:
                 block_number=self.block_number,
             )
 
+            results = native.aggregate()
             balances += chain.from_iterable(
                 (
                     Balance(balance.token_address, balance.owner_address, value)
                     for balance, value in zip(balances, values)
                 )
-                for balances, values in native.aggregate().items()
+                for balances, values in results.items()
             )
 
         return balances
