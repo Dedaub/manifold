@@ -73,6 +73,9 @@ class MultiCall(Generic[THashable]):
             pool = SingletonPool()
 
         with pool as p:
+            if len(self.calls) == 0:
+                return {}
+
             call_batches = batch(self.calls, ceil(len(self.calls) / self.num_procs))
             decoded_results = p.map(self.multicall_worker, call_batches)
             # step 7: process outputs
