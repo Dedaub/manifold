@@ -118,7 +118,7 @@ class BalanceChecker:
                     )
                     for _batch in batch(native_balances, self.batch_size)
                 ],
-                self.batch_size,
+                1,
                 require_success=False,
                 chain_id=self.chain_id,
                 num_conns=self.num_conns,
