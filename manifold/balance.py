@@ -15,8 +15,11 @@ from manifold.constants import (
     ZERO_ADDRESS,
     Network,
 )
+from manifold.log import get_logger
 from manifold.multicall import MultiCall
 from manifold.utils import batch
+
+log = get_logger()
 
 
 class BalanceRequest:
@@ -76,6 +79,7 @@ class BalanceChecker:
         balances: list[Balance] = []
 
         if len(erc20_balances):
+            log.debug(f"Processing ERC20 balances [{len(erc20_balances)}]")
             erc20 = MultiCall(
                 self.rpc_url,
                 [
@@ -104,6 +108,7 @@ class BalanceChecker:
             ]
 
         if len(native_balances):
+            log.debug(f"Processing Native balances [{len(native_balances)}]")
             native = MultiCall(
                 self.rpc_url,
                 [
@@ -126,13 +131,12 @@ class BalanceChecker:
                 block_number=self.block_number,
             )
 
-            results = native.aggregate()
             balances += chain.from_iterable(
                 (
                     Balance(balance.token_address, balance.owner_address, value)
                     for balance, value in zip(balances, values)
                 )
-                for balances, values in results.items()
+                for balances, values in native.aggregate().items()
             )
 
         return balances

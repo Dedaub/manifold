@@ -3,29 +3,24 @@
 
 import asyncio
 import multiprocessing as mp
-import warnings
 from itertools import chain
 from math import ceil
 from multiprocessing.pool import Pool
 from operator import methodcaller
-from typing import Any, Generic, Iterable, Literal, cast
+from typing import Any, Generic, Iterable, Literal
 
-import eth_retry
-import eth_retry.eth_retry
 from aiohttp import ClientSession, ClientTimeout, TCPConnector
-from parse import Result, parse  # type: ignore
 from pysad.utils import hex_to_bytes
 
 from manifold.call import Call, THashable
 from manifold.constants import AGGREGATE_SIGNATURE, MULTICALL_MAP
+from manifold.log import get_logger
 from manifold.pool import SingletonPool
 from manifold.rpc import JSONRPCErrorCode
 from manifold.signature import Signature
 from manifold.utils import batch
 
-eth_retry.eth_retry.MIN_SLEEP_TIME = 5
-eth_retry.eth_retry.MAX_SLEEP_TIME = 10
-eth_retry.eth_retry.MAX_RETRIES = 5
+log = get_logger()
 
 
 class MultiCall(Generic[THashable]):
@@ -174,22 +169,14 @@ class MultiCall(Generic[THashable]):
             },
         ) as resp:
             if resp.status != 200:
+                log.exception("`eth_call` failed for unknown reason")
                 raise RuntimeError("`eth_call` failed for unknown reason")
-            data = await resp.json()
 
+            data = await resp.json()
             if "error" in data:
                 error = data["error"]
                 code, message = error["code"], error["message"]
-                if (
-                    lengths := parse(
-                        "call retuned result on length {} exceeding limit {}", message
-                    )
-                ) is not None:
-                    lengths = cast(Result, lengths)
-                    returned, allowed = lengths[0], lengths[1]
-                    warnings.warn(
-                        f"Multicall return length ({returned}) exceeds maximum return length ({allowed}), adjust your batch size to prevent fallback calls"
-                    )
+                log.warn(f"Multicall failed with code [{code}], reason: {message}")
                 return code, message
 
             return bytes.fromhex(data["result"][2:])
