@@ -5,22 +5,47 @@ import asyncio
 import multiprocessing as mp
 from itertools import chain
 from math import ceil
-from multiprocessing.pool import Pool
+from multiprocessing.pool import Pool, ThreadPool
 from operator import methodcaller
-from typing import Any, Generic, Iterable, Literal
+from typing import Any, Generic, Iterable, Literal, Type, cast
 
+import msgspec
 from aiohttp import ClientSession, ClientTimeout, TCPConnector
+from msgspec import Struct
 from pysad.utils import hex_to_bytes
 
 from manifold.call import Call, THashable
 from manifold.constants import AGGREGATE_SIGNATURE, MULTICALL_MAP
 from manifold.log import get_logger
-from manifold.pool import SingletonPool
-from manifold.rpc import JSONRPCErrorCode
 from manifold.signature import Signature
 from manifold.utils import batch
 
 log = get_logger()
+
+
+class Bytes(bytes):
+    @classmethod
+    def validate(cls, val: Any):
+        return cls(bytes.fromhex(val.removeprefix("0x")))
+
+
+def dec_hook(type: Type, obj: Any) -> Any:
+    # `type` here is the value of the custom type annotation being decoded.
+    if type is Bytes:
+        return type.validate(obj)
+    else:
+        # Raise a TypeError for other types
+        raise TypeError(f"Objects of type {type} are not supported")
+
+
+class RPCError(Struct, gc=False):
+    code: int
+    # message: str
+
+
+class CallResponse(Struct, gc=False):
+    result: Bytes | None = None
+    error: RPCError | None = None
 
 
 class MultiCall(Generic[THashable]):
@@ -58,14 +83,14 @@ class MultiCall(Generic[THashable]):
         self.address = hex_to_bytes(MULTICALL_MAP[chain_id])
 
     def aggregate(self) -> dict[THashable, Any]:
-        pool: SingletonPool | Pool
+        pool: ThreadPool | Pool
 
         if self.num_procs > 1:
             # using fork server to avoid memory copies
             ctx = mp.get_context("forkserver")
             pool = ctx.Pool(self.num_procs)
         else:
-            pool = SingletonPool()
+            pool = ThreadPool(1)
 
         with pool as p:
             if len(self.calls) == 0:
@@ -73,67 +98,63 @@ class MultiCall(Generic[THashable]):
 
             call_batches = batch(self.calls, ceil(len(self.calls) / self.num_procs))
             decoded_results = p.map(self.multicall_worker, call_batches)
-            # step 7: process outputs
+            log.debug("Returning Results")
             return dict(chain.from_iterable(decoded_results))
 
     def multicall_worker(
         self, calls: list[Call[THashable]]
     ) -> list[tuple[THashable, Any]]:
-        raw_calls = [call.prepare() for call in calls]
-        batches = list(batch(raw_calls, self.batch_size))
-        multicalls = [self.construct_multicall(batch) for batch in batches]
         loop = asyncio.new_event_loop()
-        raw_results = loop.run_until_complete(self.execute_calls(batches, multicalls))
-        decoded_results = [
-            call.decode_output(*result)
-            for call, result in zip(calls, chain.from_iterable(raw_results))
+        return loop.run_until_complete(self._multicall_worker(calls))
+
+    async def _multicall_worker(self, calls: list[Call[THashable]]):
+        log.debug("Batching Calls")
+        call_batches = list(batch(calls, self.batch_size))
+
+        log.debug("Encoding Calldata")
+        calldata_batches = [
+            [call.prepare() for call in calls] for calls in call_batches
         ]
-        return decoded_results
+        log.debug("Constructing Multicalls")
+        multicalls = [self.construct_multicall(batch) for batch in calldata_batches]
 
-    async def execute_calls(
-        self, batches: list[list[tuple[bytes, bytes]]], multicalls: list[bytes]
-    ):
+        ret: list[tuple[THashable, Any]] = []
         async with self.create_http_client() as http_client:
-            raw_results = await asyncio.gather(
-                *[
-                    self._eth_call(http_client, calldata)  # type: ignore
-                    for calldata in multicalls
-                ]
-            )
+            log.debug("Issuing Multicalls")
+            raw_results = await self._bulk_call(http_client, multicalls)
 
-            error_bitmap = [not isinstance(x, bytes) for x in raw_results]
-            multicall_raw_results = (
-                self.decode_multicall(r)
-                for r, e in zip(raw_results, error_bitmap)
-                if not e
-            )
-            failed_batches = (
-                batch for batch, error in zip(batches, error_bitmap) if error
-            )
+            failed_calls: list[Call[THashable]] = []
+            failed_calldatas: list[tuple[bytes, bytes]] = []
 
-            fallback_raw_results = await asyncio.gather(
-                *[
-                    asyncio.gather(
-                        *[
-                            self._eth_call(http_client, calldata, target)
-                            for target, calldata in batch
-                        ]
+            log.debug("Decoding Multicalls")
+            for i, (_result, _cbatch) in enumerate(zip(raw_results, call_batches)):
+                if _result.result is not None:
+                    calls_results = self.decode_multicall(_result.result)
+                    ret += [
+                        _call.decode_output(*_call_result)
+                        for _call, _call_result in zip(_cbatch, calls_results)
+                    ]
+                else:
+                    failed_calls += _cbatch
+                    failed_calldatas += calldata_batches[i]
+
+            if len(failed_calls) == 0:
+                return ret
+
+            log.debug("Processing Failed Multicalls")
+            raw_results = await self._bulk_call(http_client, *zip(*failed_calldatas))
+            for _result, _call in zip(raw_results, failed_calls):
+                ret.append(
+                    _call.decode_output(
+                        *(
+                            (True, cast(bytes, _result.result))
+                            if _result.result is not None
+                            else (False, b"")
+                        )
                     )
-                    for batch in failed_batches
-                ]
-            )
+                )
 
-            fallback_raw_results = (
-                [(isinstance(call, bytes), call) for call in batch]
-                for batch in fallback_raw_results
-            )
-
-            raw_results = [
-                next(fallback_raw_results) if error else next(multicall_raw_results)
-                for error in error_bitmap
-            ]
-
-            return raw_results
+            return ret
 
     def create_http_client(self) -> ClientSession:
         timeout = ClientTimeout(
@@ -151,10 +172,36 @@ class MultiCall(Generic[THashable]):
     def decode_multicall(self, output: bytes) -> list[tuple[bool, bytes]]:
         return self.signature.decode_output(output)[0]
 
-    # @eth_retry.auto_retry
+    async def _bulk_call(
+        self,
+        http_client: ClientSession,
+        calldatas: Iterable[bytes],
+        targets: Iterable[bytes] | None = None,
+    ) -> list[CallResponse]:
+        raw_results: list[bytes]
+        if targets is None:
+            raw_results = await asyncio.gather(
+                *(self._eth_call(http_client, calldata) for calldata in calldatas)
+            )
+        else:
+            raw_results = await asyncio.gather(
+                *(
+                    self._eth_call(http_client, calldata, target)
+                    for calldata, target in zip(calldatas, targets)
+                )
+            )
+
+        decoder = msgspec.json.Decoder(CallResponse, dec_hook=dec_hook)
+
+        results: list[CallResponse] = []
+        for result in raw_results:
+            results.append(decoder.decode(result))
+
+        return results
+
     async def _eth_call(
         self, http_client: ClientSession, calldata: bytes, target: bytes | None = None
-    ) -> bytes | tuple[JSONRPCErrorCode, str]:
+    ) -> bytes:
         target = target or self.address
         async with http_client.post(
             self.rpc_url,
@@ -171,15 +218,7 @@ class MultiCall(Generic[THashable]):
             if resp.status != 200:
                 log.exception("`eth_call` failed for unknown reason")
                 raise RuntimeError("`eth_call` failed for unknown reason")
-
-            data = await resp.json()
-            if "error" in data:
-                error = data["error"]
-                code, message = error["code"], error["message"]
-                log.warn(f"Multicall failed with code [{code}], reason: {message}")
-                return code, message
-
-            return bytes.fromhex(data["result"][2:])
+            return await resp.read()
 
 
 def bluebird(method: str, params: tuple, call: Call):

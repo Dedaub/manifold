@@ -14,8 +14,17 @@ class Call(Generic[THashable]):
     signature: Signature
     input: tuple
     output_label: THashable
-    output_handler: Callable | None = None
+    output_handler: Callable | None
     auto_unpack: bool  # auto-unpack decoded tuples with 1 element
+
+    __slots__ = (
+        "target",
+        "signature",
+        "input",
+        "output_label",
+        "output_handler",
+        "auto_unpack",
+    )
 
     def __init__(
         self,
@@ -31,7 +40,6 @@ class Call(Generic[THashable]):
         self.input = input if input is not None else ()
         self.output_label = output_label
         self.output_handler = output_handler
-
         self.auto_unpack = auto_unpack
 
     def encode(self) -> bytes:

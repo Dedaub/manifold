@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 
-
 from itertools import chain
-from typing import Literal
+from typing import Literal, Protocol
 
+from msgspec import Struct
 from pysad.utils import hex_to_bytes
 
 from manifold.call import Call
@@ -22,26 +22,15 @@ from manifold.utils import batch
 log = get_logger()
 
 
-class BalanceRequest:
+class BalanceRequest(Protocol):
     token_address: bytes
     owner_address: bytes
 
-    def __init__(self, token_address: str | bytes, owner_address: str | bytes) -> None:
-        self.owner_address = hex_to_bytes(owner_address)
-        self.token_address = hex_to_bytes(token_address)
 
-    def is_native(self) -> bool:
-        return self.token_address == NATIVE_ADDRESS
-
-
-class Balance(BalanceRequest):
-    value: int
-
-    def __init__(
-        self, token_address: str | bytes, owner_address: str | bytes, value: int | None
-    ) -> None:
-        super().__init__(token_address, owner_address)
-        self.value = value if value is not None else 0
+class Balance(Struct, gc=False):
+    token_address: bytes
+    owner_address: bytes
+    value: int | None = None
 
 
 class BalanceChecker:
@@ -141,12 +130,15 @@ class BalanceChecker:
 
         return balances
 
+    def _is_native(self, balance: BalanceRequest) -> bool:
+        return balance.token_address == NATIVE_ADDRESS
+
     def _segment_balances(self) -> tuple[list[BalanceRequest], list[BalanceRequest]]:
         native_balances = []
         erc20_balances = []
 
         for balance in self.calls:
-            if balance.is_native():
+            if self._is_native(balance):
                 native_balances.append(balance)
             else:
                 erc20_balances.append(balance)
