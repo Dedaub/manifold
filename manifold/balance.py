@@ -39,7 +39,7 @@ class BalanceChecker:
     batch_size: int  # size of each call batch
     num_procs: int  # number of processes to handle abi encoding/decoding
     chain_id: int
-    block_number: int | Literal["latest"]
+    block_id: int | Literal["latest"] | bytes
 
     def __init__(
         self,
@@ -49,7 +49,7 @@ class BalanceChecker:
         chain_id: int = 1,
         num_conns: int = 10,  # number of connections opened with the node
         num_procs: int = 1,
-        block_number: int | Literal["latest"] = "latest",
+        block_id: int | Literal["latest"] | bytes = "latest",
     ) -> None:
         self.rpc_url = rpc_url
         self.calls = calls
@@ -59,7 +59,7 @@ class BalanceChecker:
         self.num_procs = num_procs
 
         self.batch_size = batch_size
-        self.block_number = block_number
+        self.block_id = block_id
 
         self.address = hex_to_bytes(BCHECKER_ADDRESSES[Network(chain_id)])
 
@@ -85,7 +85,7 @@ class BalanceChecker:
                 chain_id=self.chain_id,
                 num_conns=self.num_conns,
                 num_procs=self.num_procs,
-                block_number=self.block_number,
+                block_id=self.block_id,
             )
 
             balances += [
@@ -117,7 +117,7 @@ class BalanceChecker:
                 chain_id=self.chain_id,
                 num_conns=self.num_conns,
                 num_procs=self.num_procs,
-                block_number=self.block_number,
+                block_id=self.block_id,
             )
 
             balances += chain.from_iterable(

@@ -6,7 +6,6 @@ import multiprocessing as mp
 from itertools import chain
 from math import ceil
 from multiprocessing.pool import Pool, ThreadPool
-from operator import methodcaller
 from typing import Any, Generic, Iterable, Literal, Type, cast
 
 import msgspec
@@ -17,6 +16,7 @@ from pysad.utils import hex_to_bytes
 from manifold.call import Call, THashable
 from manifold.constants import AGGREGATE_SIGNATURE, MULTICALL_MAP
 from manifold.log import get_logger
+from manifold.rpc import JSONRPCError, JSONRPCErrorCode
 from manifold.signature import Signature
 from manifold.utils import batch
 
@@ -40,7 +40,7 @@ def dec_hook(type: Type, obj: Any) -> Any:
 
 class RPCError(Struct, gc=False):
     code: int
-    # message: str
+    message: str
 
 
 class CallResponse(Struct, gc=False):
@@ -56,7 +56,7 @@ class MultiCall(Generic[THashable]):
     signature: Signature
     address: bytes  # address of the multicall contract
     require_success: bool  # require all calls to succeed
-    block_number: int | Literal["latest"]
+    block_id: int | Literal["latest"] | bytes
 
     def __init__(
         self,
@@ -67,7 +67,7 @@ class MultiCall(Generic[THashable]):
         chain_id: int = 1,
         num_conns: int = 10,  # number of connections opened with the node
         num_procs: int = 1,
-        block_number: int | Literal["latest"] = "latest",
+        block_id: int | Literal["latest"] | bytes = "latest",
     ) -> None:
         self.rpc_url = rpc_url
         self.calls = calls
@@ -77,7 +77,7 @@ class MultiCall(Generic[THashable]):
 
         self.batch_size = batch_size
         self.require_success = require_success
-        self.block_number = block_number
+        self.block_id = block_id
 
         self.signature = Signature(AGGREGATE_SIGNATURE)
         self.address = hex_to_bytes(MULTICALL_MAP[chain_id])
@@ -135,6 +135,13 @@ class MultiCall(Generic[THashable]):
                         for _call, _call_result in zip(_cbatch, calls_results)
                     ]
                 else:
+                    if (
+                        isinstance(self.block_id, bytes)
+                        and cast(RPCError, _result.error).code
+                        == JSONRPCErrorCode.INVALID_INPUT
+                    ):
+                        raise JSONRPCError(_result.error.code, _result.error.message)  # type: ignore
+
                     failed_calls += _cbatch
                     failed_calldatas += calldata_batches[i]
 
@@ -209,7 +216,9 @@ class MultiCall(Generic[THashable]):
                 "method": "eth_call",
                 "params": [
                     {"to": f"0x{target.hex()}", "data": f"0x{calldata.hex()}"},
-                    self.block_number,
+                    self.block_id
+                    if isinstance(self.block_id, (str, int))
+                    else "0x" + self.block_id.hex(),
                 ],
                 "id": 1,
                 "jsonrpc": "2.0",
@@ -217,9 +226,10 @@ class MultiCall(Generic[THashable]):
         ) as resp:
             if resp.status != 200:
                 log.exception("`eth_call` failed for unknown reason")
-                raise RuntimeError("`eth_call` failed for unknown reason")
+                decoder = msgspec.json.Decoder(CallResponse, dec_hook=dec_hook)
+                result = decoder.decode(await resp.read())
+                raise JSONRPCError(
+                    cast(RPCError, result.error).code,
+                    cast(RPCError, result.error).message,
+                )
             return await resp.read()
-
-
-def bluebird(method: str, params: tuple, call: Call):
-    return methodcaller(method, *params)(call)
