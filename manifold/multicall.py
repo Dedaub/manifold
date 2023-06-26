@@ -105,7 +105,9 @@ class MultiCall(Generic[THashable]):
         self, calls: list[Call[THashable]]
     ) -> list[tuple[THashable, Any]]:
         loop = asyncio.new_event_loop()
-        return loop.run_until_complete(self._multicall_worker(calls))
+        ret = loop.run_until_complete(self._multicall_worker(calls))
+        loop.close()
+        return ret
 
     async def _multicall_worker(self, calls: list[Call[THashable]]):
         log.debug("Batching Calls")
