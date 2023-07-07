@@ -6,7 +6,7 @@ import multiprocessing as mp
 from itertools import chain
 from math import ceil
 from multiprocessing.pool import Pool, ThreadPool
-from typing import Any, Generic, Iterable, Literal, Type, cast
+from typing import Any, Generic, Iterable, Literal, Type, TypeVar, cast
 
 import msgspec
 from aiohttp import ClientSession, ClientTimeout, TCPConnector
@@ -151,7 +151,10 @@ class MultiCall(Generic[THashable]):
                 return ret
 
             log.debug("Processing Failed Multicalls")
-            raw_results = await self._bulk_call(http_client, *zip(*failed_calldatas))
+
+            raw_results = await self._bulk_call(
+                http_client, *swap(tuple(zip(*failed_calldatas)))
+            )
             for _result, _call in zip(raw_results, failed_calls):
                 ret.append(
                     _call.decode_output(
@@ -235,3 +238,12 @@ class MultiCall(Generic[THashable]):
                     cast(RPCError, result.error).message,
                 )
             return await resp.read()
+
+
+TX = TypeVar("TX")
+TY = TypeVar("TY")
+
+
+def swap(v: tuple[TX, TY]) -> tuple[TY, TX]:
+    x, y = v
+    return y, x
