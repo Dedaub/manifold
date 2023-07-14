@@ -3,10 +3,11 @@
 
 import asyncio
 import multiprocessing as mp
+from contextlib import asynccontextmanager
 from itertools import chain
 from math import ceil
 from multiprocessing.pool import Pool, ThreadPool
-from typing import Any, Generic, Iterable, Literal, Type, TypeVar, cast
+from typing import Any, AsyncGenerator, Generic, Iterable, Literal, Type, TypeVar, cast
 
 import msgspec
 from aiohttp import ClientSession, ClientTimeout, TCPConnector
@@ -168,13 +169,15 @@ class MultiCall(Generic[THashable]):
 
             return ret
 
-    def create_http_client(self) -> ClientSession:
+    @asynccontextmanager
+    async def create_http_client(self) -> AsyncGenerator[ClientSession, None]:
         timeout = ClientTimeout(
             total=None, connect=None, sock_connect=None, sock_read=None
         )
         connector = TCPConnector(limit=self.num_conns // self.num_procs)
         http_client = ClientSession(connector=connector, timeout=timeout)
-        return http_client
+        yield http_client
+        await http_client.close()
 
     def construct_multicall(self, inputs: Iterable[tuple[bytes, bytes]]) -> bytes:
         return self.signature.selector + self.signature.encode_input(
