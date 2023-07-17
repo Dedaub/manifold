@@ -11,6 +11,7 @@ from typing import Any, AsyncGenerator, Generic, Iterable, Literal, Type, TypeVa
 
 import msgspec
 from aiohttp import ClientSession, ClientTimeout, TCPConnector
+from aiohttp.typedefs import LooseHeaders
 from msgspec import Struct
 from pysad.utils import hex_to_bytes
 
@@ -69,6 +70,7 @@ class MultiCall(Generic[THashable]):
         num_conns: int = 10,  # number of connections opened with the node
         num_procs: int = 1,
         block_id: int | Literal["latest"] | bytes = "latest",
+        extra_http_headers: LooseHeaders | None = None,
     ) -> None:
         self.rpc_url = rpc_url
         self.calls = calls
@@ -82,6 +84,8 @@ class MultiCall(Generic[THashable]):
 
         self.signature = Signature(AGGREGATE_SIGNATURE)
         self.address = hex_to_bytes(MULTICALL_MAP[chain_id])
+
+        self.extra_http_headers = extra_http_headers
 
     def aggregate(self) -> dict[THashable, Any]:
         pool: ThreadPool | Pool
@@ -122,7 +126,9 @@ class MultiCall(Generic[THashable]):
         multicalls = [self.construct_multicall(batch) for batch in calldata_batches]
 
         ret: list[tuple[THashable, Any]] = []
-        async with self.create_http_client() as http_client:
+        async with self.create_http_client(
+            headers=self.extra_http_headers
+        ) as http_client:
             log.debug("Issuing Multicalls")
             raw_results = await self._bulk_call(http_client, multicalls)
 
@@ -170,14 +176,26 @@ class MultiCall(Generic[THashable]):
             return ret
 
     @asynccontextmanager
-    async def create_http_client(self) -> AsyncGenerator[ClientSession, None]:
+    async def create_http_client(
+        self, headers: LooseHeaders | None = None
+    ) -> AsyncGenerator[ClientSession, None]:
         timeout = ClientTimeout(
             total=None, connect=None, sock_connect=None, sock_read=None
         )
         connector = TCPConnector(limit=self.num_conns // self.num_procs)
-        http_client = ClientSession(connector=connector, timeout=timeout)
-        yield http_client
-        await http_client.close()
+
+        http_client = ClientSession(
+            connector=connector, timeout=timeout, headers=headers
+        )
+
+        try:
+            yield http_client
+        except Exception as e:
+            await http_client.close()
+
+            raise e
+        finally:
+            await http_client.close()
 
     def construct_multicall(self, inputs: Iterable[tuple[bytes, bytes]]) -> bytes:
         return self.signature.selector + self.signature.encode_input(
