@@ -187,8 +187,15 @@ class MultiCall(Generic[THashable]):
         http_client = ClientSession(
             connector=connector, timeout=timeout, headers=headers
         )
-        yield http_client
-        await http_client.close()
+
+        try:
+            yield http_client
+        except Exception as e:
+            await http_client.close()
+
+            raise e
+        finally:
+            await http_client.close()
 
     def construct_multicall(self, inputs: Iterable[tuple[bytes, bytes]]) -> bytes:
         return self.signature.selector + self.signature.encode_input(
