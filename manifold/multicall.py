@@ -9,7 +9,6 @@ from math import ceil
 from multiprocessing.pool import Pool, ThreadPool
 from typing import Any, AsyncGenerator, Generic, Iterable, Literal, Type, TypeVar, cast
 
-import aiohttp.web
 import msgspec
 from aiohttp import ClientSession, ClientTimeout, TCPConnector
 from aiohttp.typedefs import LooseHeaders
@@ -19,7 +18,7 @@ from pysad.utils import hex_to_bytes
 from manifold.call import Call, THashable
 from manifold.constants import AGGREGATE_SIGNATURE, MULTICALL_MAP
 from manifold.log import get_logger
-from manifold.rpc import JSONRPCError, JSONRPCErrorCode
+from manifold.rpc import HTTPException, JSONRPCError, JSONRPCErrorCode
 from manifold.signature import Signature
 from manifold.utils import batch
 
@@ -251,9 +250,8 @@ class MultiCall(Generic[THashable]):
                 "jsonrpc": "2.0",
             },
         ) as resp:
-            match resp.status:
-                case 503:
-                    raise aiohttp.web.HTTPServiceUnavailable(text="Rate limit exceeded")
+            if resp.status != 200:
+                raise HTTPException(status_code=resp.status)
 
             return await resp.read()
 

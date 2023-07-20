@@ -23,8 +23,13 @@ EIP1474ErrorCodes = {item.value for item in JSONRPCErrorCode}
 
 
 class JSONRPCError(RuntimeError):
-    code: int | JSONRPCErrorCode
-
     def __init__(self, code: int, message: str):
         super().__init__(message)
-        self.code = code if code not in EIP1474ErrorCodes else JSONRPCErrorCode(code)
+        self.code: int | JSONRPCErrorCode = (
+            code if code not in EIP1474ErrorCodes else JSONRPCErrorCode(code)
+        )
+
+
+class HTTPException(RuntimeError):
+    def __init__(self, status_code: int):
+        self.status_code = status_code
