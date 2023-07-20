@@ -18,7 +18,7 @@ from pysad.utils import hex_to_bytes
 from manifold.call import Call, THashable
 from manifold.constants import AGGREGATE_SIGNATURE, MULTICALL_MAP
 from manifold.log import get_logger
-from manifold.rpc import JSONRPCError, JSONRPCErrorCode
+from manifold.rpc import HTTPException, JSONRPCError, JSONRPCErrorCode
 from manifold.signature import Signature
 from manifold.utils import batch
 
@@ -251,13 +251,8 @@ class MultiCall(Generic[THashable]):
             },
         ) as resp:
             if resp.status != 200:
-                log.exception("`eth_call` failed for unknown reason")
-                decoder = msgspec.json.Decoder(CallResponse, dec_hook=dec_hook)
-                result = decoder.decode(await resp.read())
-                raise JSONRPCError(
-                    cast(RPCError, result.error).code,
-                    cast(RPCError, result.error).message,
-                )
+                raise HTTPException(status_code=resp.status)
+
             return await resp.read()
 
 
