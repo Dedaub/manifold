@@ -9,6 +9,7 @@ from math import ceil
 from multiprocessing.pool import Pool, ThreadPool
 from typing import Any, AsyncGenerator, Generic, Iterable, Literal, Type, TypeVar, cast
 
+import aiohttp.web
 import msgspec
 from aiohttp import ClientSession, ClientTimeout, TCPConnector
 from aiohttp.typedefs import LooseHeaders
@@ -250,14 +251,10 @@ class MultiCall(Generic[THashable]):
                 "jsonrpc": "2.0",
             },
         ) as resp:
-            if resp.status != 200:
-                log.exception("`eth_call` failed for unknown reason")
-                decoder = msgspec.json.Decoder(CallResponse, dec_hook=dec_hook)
-                result = decoder.decode(await resp.read())
-                raise JSONRPCError(
-                    cast(RPCError, result.error).code,
-                    cast(RPCError, result.error).message,
-                )
+            match resp.status:
+                case 503:
+                    raise aiohttp.web.HTTPServiceUnavailable(text="Rate limit exceeded")
+
             return await resp.read()
 
 
