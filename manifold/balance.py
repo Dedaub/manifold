@@ -10,9 +10,11 @@ from manifold.call import Call
 from manifold.constants import (
     BCHECKER_ADDRESSES,
     ERC20_BALANCE_SIGNATURE,
+    ETH_BALANCE_SIGNATURE,
     NATIVE_ADDRESS,
     NATIVE_BALANCE_SIGNATURE,
     ZERO_ADDRESS,
+    MULTICALL_MAP,
     Network,
 )
 from manifold.log import get_logger
@@ -102,17 +104,14 @@ class BalanceChecker:
                 self.rpc_url,
                 [
                     Call(
-                        self.address,
-                        NATIVE_BALANCE_SIGNATURE,
-                        tuple(_batch),
-                        input=(
-                            [balance.owner_address for balance in _batch],
-                            [ZERO_ADDRESS],
-                        ),
+                        MULTICALL_MAP[Network(self.chain_id)],
+                        ETH_BALANCE_SIGNATURE,
+                        (balance.token_address, balance.owner_address),
+                        input=(balance.owner_address,),
                     )
-                    for _batch in batch(native_balances, self.batch_size)
+                    for balance in native_balances
                 ],
-                1,
+                1000,
                 require_success=False,
                 chain_id=self.chain_id,
                 num_conns=self.num_conns,
@@ -120,13 +119,13 @@ class BalanceChecker:
                 block_id=self.block_id,
             )
 
-            balances += chain.from_iterable(
-                (
-                    Balance(balance.token_address, balance.owner_address, value)
-                    for balance, value in zip(balances, values)
-                )
-                for balances, values in native.aggregate().items()
-            )
+            balances += [
+                Balance(token_address, owner_address, value)
+                for (
+                    token_address,
+                    owner_address,
+                ), value in native.aggregate().items()
+            ]
 
         return balances
 

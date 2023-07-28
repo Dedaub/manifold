@@ -161,3 +161,4 @@ BCHECKER_ADDRESSES = {
 
 NATIVE_BALANCE_SIGNATURE = "balances(address[],address[])(uint256[])"
 ERC20_BALANCE_SIGNATURE = "balanceOf(address)(uint256)"
+ETH_BALANCE_SIGNATURE = "getEthBalance(address)(uint256)"
