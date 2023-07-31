@@ -80,7 +80,7 @@ class BalanceChecker:
                         (balance.token_address, balance.owner_address),
                         input=(balance.owner_address,),
                     )
-                    for balance in erc20_balances
+                    for balance in sorted(erc20_balances, key=lambda x: x.owner_address)
                 ],
                 self.batch_size,
                 require_success=False,
