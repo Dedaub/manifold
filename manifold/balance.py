@@ -12,8 +12,6 @@ from manifold.constants import (
     ERC20_BALANCE_SIGNATURE,
     ETH_BALANCE_SIGNATURE,
     NATIVE_ADDRESS,
-    NATIVE_BALANCE_SIGNATURE,
-    ZERO_ADDRESS,
     MULTICALL_MAP,
     Network,
 )
