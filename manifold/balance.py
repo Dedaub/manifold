@@ -1,23 +1,19 @@
 #!/usr/bin/env python3
 
-from itertools import chain
 from typing import Literal, Protocol
 
 from msgspec import Struct
-from pysad.utils import hex_to_bytes
 
 from manifold.call import Call
 from manifold.constants import (
-    BCHECKER_ADDRESSES,
     ERC20_BALANCE_SIGNATURE,
     ETH_BALANCE_SIGNATURE,
-    NATIVE_ADDRESS,
     MULTICALL_MAP,
+    NATIVE_ADDRESS,
     Network,
 )
 from manifold.log import get_logger
 from manifold.multicall import MultiCall
-from manifold.utils import batch
 
 log = get_logger()
 
@@ -60,8 +56,6 @@ class BalanceChecker:
 
         self.batch_size = batch_size
         self.block_id = block_id
-
-        self.address = hex_to_bytes(BCHECKER_ADDRESSES[Network(chain_id)])
 
     def aggregate(self) -> list[Balance]:
         native_balances, erc20_balances = self._segment_balances()
