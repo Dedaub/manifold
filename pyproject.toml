@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "manifold"
-version = "0.3.11"
+version = "0.3.12"
 description = "Light and Robust Web3 Multicall"
 authors = ["Tony Rocco Valentine <tonyroccovalentine@protonmail.com>"]
 license = "MIT"
