@@ -148,7 +148,7 @@ class MultiCall(Generic[THashable]):
                         isinstance(self.block_id, bytes)
                         and cast(RPCError, _result.error).code
                         == JSONRPCErrorCode.INVALID_INPUT
-                        and cast(RPCError, _result.error).message == "out of gas"
+                        and cast(RPCError, _result.error).message != "out of gas"
                     ):
                         raise JSONRPCError(_result.error.code, _result.error.message)  # type: ignore
 
