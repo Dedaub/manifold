@@ -52,6 +52,7 @@ class Network(IntEnum):
     Avax = 43114
     GodwokenTestnet = 71401
     Godwoken = 71402
+    Base = 8453
     Mumbai = 80001
     ArbitrumRinkeby = 421611
     ArbitrumGorli = 421613
@@ -127,6 +128,7 @@ MULTICALL3_ADDRESSES: dict[int, str] = {
     Network.Avax: "0xcA11bde05977b3631167028862bE2a173976CA11",
     Network.GodwokenTestnet: "0xcA11bde05977b3631167028862bE2a173976CA11",
     Network.Godwoken: "0xcA11bde05977b3631167028862bE2a173976CA11",
+    Network.Base: "0xcA11bde05977b3631167028862bE2a173976CA11",
     Network.Mumbai: "0xcA11bde05977b3631167028862bE2a173976CA11",
     Network.ArbitrumRinkeby: "0xcA11bde05977b3631167028862bE2a173976CA11",
     Network.ArbitrumGorli: "0xcA11bde05977b3631167028862bE2a173976CA11",
