@@ -92,8 +92,11 @@ class multicalldict(defaultdict[Network, str]):
     """
 
     def __missing__(self, __key: Network) -> str:
-        if __key not in Network:
-            raise ValueError
+        try:
+            Network(__key)
+        except ValueError:
+            raise ValueError(f"{__key} is not a supported chain id"
+
         return "0xcA11bde05977b3631167028862bE2a173976CA11"
 
 
