@@ -55,6 +55,7 @@ class Network(IntEnum):
     Godwoken = 71402
     Base = 8453
     Mumbai = 80001
+    Blast = 81457
     ArbitrumRinkeby = 421611
     ArbitrumGorli = 421613
     Sepolia = 11155111
