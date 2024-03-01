@@ -95,7 +95,7 @@ class multicalldict(defaultdict[Network, str]):
         try:
             Network(__key)
         except ValueError:
-            raise ValueError(f"{__key} is not a supported chain id"
+            raise ValueError(f"{__key} is not a supported chain id")
 
         return "0xcA11bde05977b3631167028862bE2a173976CA11"
 
