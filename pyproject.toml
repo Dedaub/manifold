@@ -9,7 +9,7 @@ readme = "README.md"
 [tool.poetry.dependencies]
 python = "^3.10"
 aiohttp = "^3.8.4"
-pysad = { git = "https://github.com/Dedaub/pySAD", tag = "v0.1.4" }
+pysad = { git = "https://github.com/Dedaub/pySAD", tag = "v0.1.5" }
 msgspec = "^0.15.1"
 
 
