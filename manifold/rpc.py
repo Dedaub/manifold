@@ -33,3 +33,7 @@ class JSONRPCError(RuntimeError):
 class HTTPException(RuntimeError):
     def __init__(self, status_code: int):
         self.status_code = status_code
+
+    # Need this for pickle support
+    def __reduce__(self):
+        return type(self), (self.status_code,)
