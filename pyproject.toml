@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "manifold"
-version = "0.3.20"
+version = "0.3.21"
 description = "Light and Robust Web3 Multicall"
 authors = ["Tony Rocco Valentine <tonyroccovalentine@protonmail.com>"]
 license = "MIT"
@@ -10,7 +10,7 @@ readme = "README.md"
 python = "^3.10"
 aiohttp = "^3.8.4"
 pysad = { git = "https://github.com/Dedaub/pySAD", tag = "v0.1.5" }
-msgspec = "^0.15.1"
+msgspec = "^0.19.0"
 
 
 [tool.poetry.group.dev.dependencies]
