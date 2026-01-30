@@ -31,9 +31,10 @@ class JSONRPCError(RuntimeError):
 
 
 class HTTPException(RuntimeError):
-    def __init__(self, status_code: int):
+    def __init__(self, status_code: int, text: str):
         self.status_code = status_code
+        self.text = text
 
     # Need this for pickle support
     def __reduce__(self):
-        return type(self), (self.status_code,)
+        return type(self), (self.status_code, self.text,)

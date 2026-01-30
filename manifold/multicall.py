@@ -252,7 +252,8 @@ class MultiCall(Generic[THashable]):
             },
         ) as resp:
             if resp.status != 200:
-                raise HTTPException(status_code=resp.status)
+                text = await resp.text()
+                raise HTTPException(status_code=resp.status, text=text)
 
             return await resp.read()
 
