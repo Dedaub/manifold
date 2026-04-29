@@ -43,10 +43,10 @@ CALLS = cast(
     ["num_procs", "batch_divisor"],
     [(1, 1), (1, 4), (1, 8), (2, 2), (3, 2), (4, 1), (8, 1)],
 )
-def test_multicall(num_procs: int, batch_divisor: int):
+def test_multicall(num_procs: int, batch_divisor: int, eth_rpc_url: str):
     calls = CALLS
     multicall = MultiCall(
-        "http://localhost:8090/ethereum",
+        eth_rpc_url,
         calls,
         batch_size=len(calls) // batch_divisor,
         num_procs=num_procs,
@@ -58,10 +58,10 @@ def test_multicall(num_procs: int, batch_divisor: int):
         tokens[token] = tokens.get(token, {}) | {key: value}
 
 
-def test_block_hash():
+def test_block_hash(eth_rpc_url: str):
     calls = CALLS
     multicall = MultiCall(
-        "http://localhost:8090/ethereum",
+        eth_rpc_url,
         calls,
         batch_size=len(calls) // 4,
         block_id=hex_to_bytes(
@@ -76,10 +76,10 @@ def test_block_hash():
         tokens[token] = tokens.get(token, {}) | {key: value}
 
 
-def test_block_hash_fail():
+def test_block_hash_fail(eth_rpc_url: str):
     calls = CALLS
     multicall = MultiCall(
-        "http://localhost:8090/ethereum",
+        eth_rpc_url,
         calls,
         batch_size=len(calls) // 4,
         block_id=randbytes(32),

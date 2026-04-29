@@ -22,9 +22,9 @@ class BReq:
     ["tokens"],
     [(ERC20_BALANCES,), (NATIVE_BALANCES,), (ERC20_BALANCES | NATIVE_BALANCES,)],
 )
-def test_balances(tokens: dict[tuple[str, str], int]):
+def test_balances(tokens: dict[tuple[str, str], int], eth_rpc_url: str):
     bc = BalanceChecker(
-        "http://localhost:8090/ethereum",
+        eth_rpc_url,
         [
             BReq(hex_to_bytes(token_address), hex_to_bytes(owner_address))
             for (token_address, owner_address) in tokens.keys()
@@ -46,9 +46,9 @@ def test_balances(tokens: dict[tuple[str, str], int]):
     assert all(balances.values())
 
 
-def test_balances_hash():
+def test_balances_hash(eth_rpc_url: str):
     bc = BalanceChecker(
-        "http://localhost:8090/ethereum",
+        eth_rpc_url,
         [
             BReq(hex_to_bytes(token_address), hex_to_bytes(owner_address))
             for (token_address, owner_address) in ERC20_BALANCES.keys()
@@ -73,9 +73,9 @@ def test_balances_hash():
     assert all(balances.values())
 
 
-def test_balances_hash_fail():
+def test_balances_hash_fail(eth_rpc_url: str):
     bc = BalanceChecker(
-        "http://localhost:8090/ethereum",
+        eth_rpc_url,
         [
             BReq(hex_to_bytes(token_address), hex_to_bytes(owner_address))
             for (token_address, owner_address) in ERC20_BALANCES.keys()
