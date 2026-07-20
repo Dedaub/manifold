@@ -42,6 +42,7 @@ class Network(IntEnum):
     Milkomeda = 2001
     Kava = 2222
     FantomTestnet = 4002
+    Robinhood = 4663
     Canto = 7700
     Klaytn = 8217
     EvmosTestnet = 9000
@@ -81,6 +82,7 @@ MULTICALL2_ADDRESSES: dict[int, str] = {
     Network.Optimism: "0x2DC0E2aa608532Da689e89e237dF582B783E552C",
     Network.OptimismKovan: "0x2DC0E2aa608532Da689e89e237dF582B783E552C",
     Network.Kava: "0x45be772faE4a9F31401dfF4738E5DC7DD439aC0b",
+    Network.Robinhood: "0x2cAC2D899eCC914d704FeaAE33ac1bF36277DaD1",
 }
 
 
