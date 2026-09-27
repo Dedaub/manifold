@@ -43,6 +43,7 @@ class Network(IntEnum):
     Kava = 2222
     FantomTestnet = 4002
     Robinhood = 4663
+    Arc = 5042
     Canto = 7700
     Klaytn = 8217
     EvmosTestnet = 9000
