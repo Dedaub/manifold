@@ -1,6 +1,6 @@
 [project]
 name = "manifold"
-version = "0.3.22"
+version = "0.3.23"
 description = "Light and Robust Web3 Multicall"
 authors = [{ name = "Tony Rocco Valentine", email = "tonyroccovalentine@protonmail.com" }]
 requires-python = ">=3.10,<4"
@@ -16,8 +16,14 @@ classifiers = [
 ]
 dependencies = [
     "aiohttp>=3.8.4,<4",
-    "pysad",
-    "msgspec>=0.15.1,<0.16",
+    # pip does not read [tool.uv.sources]: without the URL here, pip installs
+    # the unrelated "pysad" project from PyPI.
+    "pysad @ git+https://github.com/Dedaub/pySAD.git@f90ad18ff4598b9b8657d667692a824b0f2ace69",
+    # 0.18.6 is the first msgspec with wheels for Python 3.12. msgspec 0.15
+    # does not compile on Python 3.12 or later.
+    "msgspec>=0.18.6,<1",
+    # manifold/log.py imports rich
+    "rich>=13.4.2",
 ]
 
 [dependency-groups]
@@ -29,9 +35,6 @@ dev = [
 ]
 
 [tool.uv]
-
-[tool.uv.sources]
-pysad = { git = "https://github.com/Dedaub/pySAD", tag = "v0.1.5" }
 
 [tool.uv.build-backend]
 module-root = ""
