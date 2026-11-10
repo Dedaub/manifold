@@ -3,10 +3,10 @@
 
 import asyncio
 import multiprocessing as mp
+from concurrent.futures import ThreadPoolExecutor
 from contextlib import asynccontextmanager
 from itertools import chain
 from math import ceil
-from multiprocessing.pool import Pool, ThreadPool
 from typing import Any, AsyncGenerator, Generic, Iterable, Literal, Type, TypeVar, cast
 
 import msgspec
@@ -88,23 +88,28 @@ class MultiCall(Generic[THashable]):
         self.extra_http_headers = extra_http_headers
 
     def aggregate(self) -> dict[THashable, Any]:
-        pool: ThreadPool | Pool
+        if len(self.calls) == 0:
+            return {}
+
+        call_batches = batch(self.calls, ceil(len(self.calls) / self.num_procs))
 
         if self.num_procs > 1:
             # using fork server to avoid memory copies
             ctx = mp.get_context("forkserver")
-            pool = ctx.Pool(self.num_procs)
+            with ctx.Pool(self.num_procs) as pool:
+                decoded_results = pool.map(self.multicall_worker, call_batches)
         else:
-            pool = ThreadPool(1)
+            # One worker thread, so that a caller with a running event loop can
+            # call this. Not multiprocessing's ThreadPool: on Python 3.14 it
+            # starts the resource tracker process from sys.executable, which is
+            # empty in an embedded interpreter such as PL/Python.
+            with ThreadPoolExecutor(max_workers=1) as executor:
+                decoded_results = list(
+                    executor.map(self.multicall_worker, call_batches)
+                )
 
-        with pool as p:
-            if len(self.calls) == 0:
-                return {}
-
-            call_batches = batch(self.calls, ceil(len(self.calls) / self.num_procs))
-            decoded_results = p.map(self.multicall_worker, call_batches)
-            log.debug("Returning Results")
-            return dict(chain.from_iterable(decoded_results))
+        log.debug("Returning Results")
+        return dict(chain.from_iterable(decoded_results))
 
     def multicall_worker(
         self, calls: list[Call[THashable]]
